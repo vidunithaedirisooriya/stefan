@@ -76,10 +76,10 @@ void setup() {
   pinMode(23,OUTPUT);
   for(int a; a<3 ; a++){
     pinMode(speeds[a], OUTPUT);
-    digitalWrite(speeds[a], true);
+    digitalWrite(speeds[a], false);
   }
   pinMode(18,OUTPUT);
-  digitalWrite(18, true);
+  digitalWrite(18, false);
 
   u8g2.begin();
   delay(500);
@@ -229,10 +229,10 @@ void execute() {      //timer countdown, display and misc.
  Serial.println(n);
  Serial.println(relayState);
  Serial.println("on");
- digitalWrite(speeds[n-1], HIGH);
+ digitalWrite(speeds[n-1], LOW);
  Serial.println(n-1);
- if(n!=3){digitalWrite(speeds[3], HIGH);}
-digitalWrite(23, !swing);     //the relays turns on when 0 and off when 1 (this is because most relay modules I bought are this way.)
+ if(n!=3){digitalWrite(speeds[3], LOW);}
+digitalWrite(23, swing);     //the relays turns on when 0 and off when 1 (this is because most relay modules I bought are this way.)
 
  if(timer == 1) {
   if(currentMillis - prevCountDownMillis >= 60000){
@@ -243,7 +243,7 @@ digitalWrite(23, !swing);     //the relays turns on when 0 and off when 1 (this 
     }
   }
   if(timeSrc == 0){
-    relayState = 1;
+    relayState = 0;
     timer = 0;
   }
   ESP_BT.write(timeSrc);    //update BT app indicator
@@ -257,9 +257,9 @@ digitalWrite(23, !swing);     //the relays turns on when 0 and off when 1 (this 
     u8g2.setFont(u8g2_font_logisoso32_tf);
     u8g2.setCursor(98, 63);
     if(relayState){
-      u8g2.print('0');
+      u8g2.print(n+1);
     } else{
-    u8g2.print (n+1);  
+    u8g2.print (0);  
     }
     if(timer){
     u8g2.drawXBM(96, 0, 32, 32, hourglass);
