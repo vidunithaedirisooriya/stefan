@@ -1,4 +1,4 @@
-//23 = swingrelay, 14 = swing touch ctrl
+//25 = swingrelay, 14 = swing touch ctrl
 
 #include <Arduino.h>                  //including all the needed libraries
 #include "PinDefinitionsAndMore.h"
@@ -38,7 +38,7 @@ int timeSrc =0;          //number of minutes in timer
 bool timer;           //timer: on/off
 bool swing;           //swinging or not
 
-int speeds[]={25,4,5,18};   //pins to which the speed controlling relays are connected
+int speeds[]={23,18,5,4};   //pins to which the speed controlling relays are connected
 
 int incoming;         //to store BT message
 
@@ -73,13 +73,13 @@ void setup() {
   pinMode(27, INPUT);
   pinMode(33, INPUT);
   pinMode(32, INPUT);
-  pinMode(23,OUTPUT);
+  pinMode(25,OUTPUT);
   for(int a; a<3 ; a++){
     pinMode(speeds[a], OUTPUT);
     digitalWrite(speeds[a], false);
   }
-  pinMode(18,OUTPUT);
-  digitalWrite(18, false);
+  pinMode(4,OUTPUT);
+  digitalWrite(4, false);
 
   u8g2.begin();
   delay(500);
@@ -232,7 +232,7 @@ void execute() {      //timer countdown, display and misc.
  digitalWrite(speeds[n-1], LOW);
  Serial.println(n-1);
  if(n!=3){digitalWrite(speeds[3], LOW);}
-digitalWrite(23, swing);     //the relays turns on when 0 and off when 1 (this is because most relay modules I bought are this way.)
+digitalWrite(25, swing);     //the relays turns on when 0 and off when 1 (this is because most relay modules I bought are this way.)
 
  if(timer == 1) {
   if(currentMillis - prevCountDownMillis >= 60000){
