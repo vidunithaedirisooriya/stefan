@@ -1,4 +1,3 @@
-//25 = swingrelay, 14 = swing touch ctrl
 
 #include <Arduino.h>                  //including all the needed libraries
 #include "PinDefinitionsAndMore.h"
@@ -9,6 +8,7 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <Preferences.h>
 
 #ifdef U8X8_HAVE_HW_SPI
 #include <SPI.h>
@@ -20,7 +20,7 @@ U8G2_SSD1306_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
 #define DECODE_NEC                                    //comment this line and add your protocol if you use a remote with other IR protocols
 
-#define bleServerName   "venturo 0001"
+#define defaultBLEServerName   "venturo 0001"
 #define SERVICE_UUID    "5cfd3a85-6b69-4396-85e3-bdef0b414d0a"
 #define relayState_UUID "5cfd3a86-6b69-4396-85e3-bdef0b414d0a"
 #define timeSrc_UUID    "5cfd3a87-6b69-4396-85e3-bdef0b414d0a"
@@ -47,6 +47,7 @@ BLEDescriptor timerDescriptor(BLEUUID(timer_UUID));
 BLECharacteristic nameCharacteristic(BLEUUID(name_UUID), BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_WRITE);
 BLEDescriptor nameDescriptor(BLEUUID(name_UUID));
 
+Preferences prefs;
 bool deviceConnected = false;
 
 unsigned long currentMillis;              //variables to store the time for incoming timing functions
@@ -92,11 +93,11 @@ const unsigned char nothing [] PROGMEM = {
 class MyServerCallbacks: public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
     deviceConnected = true;
-    Serial.println("Device Connected");
+    // Serial.println("Device Connected");
   };
   void onDisconnect(BLEServer* pServer) {
     deviceConnected = false;
-    Serial.println("Device Disconnected");
+    // Serial.println("Device Disconnected");
     pServer->getAdvertising()->start();
   }
 };
@@ -105,12 +106,8 @@ class AllCallbacks: public BLECharacteristicCallbacks { //handle controlling thi
   void onWrite(BLECharacteristic *pCharacteristic) {
     std::string value = pCharacteristic->getValue();
     uint16_t numValue = *(uint16_t*)value.data();
-    // Serial.print(numValue);
-    // Serial.print("__from__");
-    // Serial.println(pCharacteristic->getUUID().toString().c_str());
-    // Check which characteristic this is
+
     if (pCharacteristic->getUUID().equals(BLEUUID(relayState_UUID))) {
-      // Handle RelayState
       relayState=!relayState;
       uint8_t relayStateForBLE = relayState ? 1 : 0;
       relayStateCharacteristic.setValue(&relayStateForBLE,1);
@@ -126,34 +123,34 @@ class AllCallbacks: public BLECharacteristicCallbacks { //handle controlling thi
       timeSrcCharacteristic.notify(); 
     }
     else if (pCharacteristic->getUUID().equals(BLEUUID(n_UUID))) {
-      // Handle N
       n = numValue ;
       nCharacteristic.setValue(n);
       nCharacteristic.notify(); 
     }
     else if (pCharacteristic->getUUID().equals(BLEUUID(timer_UUID))) {
-      // Handle N
       timer=!timer;
       uint8_t timerValueForBLE = timer ? 1 : 0;
       timerCharacteristic.setValue(&timerValueForBLE, 1);
       timerCharacteristic.notify();
     }
     else if (pCharacteristic->getUUID().equals(BLEUUID(swing_UUID))) {
-      // Handle N
       swing=!swing;
       uint8_t swingValueForBLE = swing&&relayState ? 1 : 0;
       swingCharacteristic.setValue(&swingValueForBLE, 1);
       swingCharacteristic.notify();
     }
-    // else if (pCharacteristic->getUUID().equals(BLEUUID(name_UUID))) {
-    //   // Handle N
-    //   if (numValue == 1) Serial.println("hey i got the command to power toggle");
-    // }
+    else if (pCharacteristic->getUUID().equals(BLEUUID(name_UUID))) {
+      String deviceName;
+      for (int i = 0; i < value.length(); i++) {
+         deviceName += (char)value[i];
+        }
+      prefs.putString("deviceName",deviceName);
+    }
   }
 };
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   IrReceiver.begin(IR_RECEIVE_PIN, ENABLE_LED_FEEDBACK);
   pinMode(13, INPUT);
   pinMode(12, INPUT);
@@ -170,7 +167,9 @@ void setup() {
   digitalWrite(4, false);
 
   u8g2.begin();
-  BLEDevice::init(bleServerName);
+  prefs.begin("BLEname",false);
+  std::string deviceName = std::string(prefs.getString("deviceName",defaultBLEServerName).c_str());
+  BLEDevice::init(deviceName);
   
   // Create the BLE Server
   BLEServer *pServer = BLEDevice::createServer();
@@ -211,7 +210,7 @@ void changerelayState() {   //function to toggle power when called
     uint8_t relayStateForBLE = relayState ? 1 : 0;
     relayStateCharacteristic.setValue(&relayStateForBLE,1);
     relayStateCharacteristic.notify();
-
+    
     uint8_t swingValueForBLE = swing&&relayState ? 1 : 0;   //since swing is dependent on relayState
     swingCharacteristic.setValue(&swingValueForBLE, 1);
     swingCharacteristic.notify();
@@ -271,7 +270,7 @@ void toggleSwing() {        //same old
 void remote() {         //to receive, decode, understand and function according to IR remote
   if (IrReceiver.decode()) {
     IrReceiver.resume();  // Early enable receiving of the next IR frame
-
+    
     switch (IrReceiver.decodedIRData.command) {
       case 0x85:
        changerelayState();
@@ -324,16 +323,16 @@ void ctrlPanel(){     //read what touchbuttons are contacted and function accord
 
 
 void execute() {      //timer countdown, display and misc.
- digitalWrite(speeds[n],relayState);
-//  Serial.println(n);
-//  Serial.println(relayState);
-//  Serial.println("on");     //these serial.prints were used for troubleshooting
- digitalWrite(speeds[n-1], LOW);
-//  Serial.println(n-1);
- if(n!=3) digitalWrite(speeds[3], LOW);   //the relays turns on when 0 and off when 1 (this is because most relay modules I bought are this way.)
- digitalWrite(25, swing&&relayState);   //let the fan swing only when it is spinning and commanded to swing  
-
- if(timer == 1) {
+  digitalWrite(speeds[n],relayState);
+  //  Serial.println(n);
+  //  Serial.println("on");     //these serial.prints were used for troubleshooting
+  //  Serial.println(relayState);
+  digitalWrite(speeds[n-1], LOW);
+  //  Serial.println(n-1);
+  if(n!=3) digitalWrite(speeds[3], LOW);   //the relays turns on when 0 and off when 1 (this is because most relay modules I bought are this way.)
+  digitalWrite(25, swing&&relayState);   //let the fan swing only when it is spinning and commanded to swing  
+  
+  if(timer == 1) {
       if(currentMillis - prevCountDownMillis >= 60000){
         prevCountDownMillis = currentMillis;
         timeSrc = timeSrc - 1;
@@ -341,27 +340,27 @@ void execute() {      //timer countdown, display and misc.
         timeSrcCharacteristic.setValue(timeSrc);
         timeSrcCharacteristic.notify();
       }
-    if(timeSrc == 0){
-      relayState = 0;
-      timer = 0;
-
-      timeSrcCharacteristic.setValue(timeSrc);
-      timeSrcCharacteristic.notify();
-
-      uint8_t relayStateForBLE = relayState ? 1 : 0;
-      relayStateCharacteristic.setValue(&relayStateForBLE,1);
-      relayStateCharacteristic.notify();
-
-      uint8_t timerValueForBLE = timer ? 1 : 0;
-      timerCharacteristic.setValue(&timerValueForBLE, 1);
-      timerCharacteristic.notify();
+      if(timeSrc == 0){
+        relayState = 0;
+        timer = 0;
+        
+        timeSrcCharacteristic.setValue(timeSrc);
+        timeSrcCharacteristic.notify();
+        
+        uint8_t relayStateForBLE = relayState ? 1 : 0;
+        relayStateCharacteristic.setValue(&relayStateForBLE,1);
+        relayStateCharacteristic.notify();
+        
+        uint8_t timerValueForBLE = timer ? 1 : 0;
+        timerCharacteristic.setValue(&timerValueForBLE, 1);
+        timerCharacteristic.notify();
 
       uint8_t swingValueForBLE = swing&&relayState ? 1 : 0;
       swingCharacteristic.setValue(&swingValueForBLE, 1);
       swingCharacteristic.notify();
     }
   }
-
+  
   u8g2.firstPage();
   do{
     u8g2.setFont(u8g2_font_inb63_mn);
@@ -372,23 +371,23 @@ void execute() {      //timer countdown, display and misc.
     if(relayState){
       u8g2.print(n+1);
     } else{
-    u8g2.print (0);  
+      u8g2.print (0);  
     }
     if(timer){
-    u8g2.drawXBM(96, 0, 32, 32, hourglass);
+      u8g2.drawXBM(96, 0, 32, 32, hourglass);
     } else {
-    u8g2.drawXBM(96, 0, 32, 32, nothing);}
-  } while ( u8g2.nextPage() );
-  delay(100);
-}
-
-
-void loop() {     //just call the functions
-  currentMillis = millis();
-  remote();
-  ctrlPanel();
-  execute();
-  delay(50);
-}
- 
-//vidunithaedirisooriya 2025
+      u8g2.drawXBM(96, 0, 32, 32, nothing);}
+    } while ( u8g2.nextPage() );
+    delay(100);
+  }
+  
+  
+  void loop() {     //just call the functions
+    currentMillis = millis();
+    remote();
+    ctrlPanel();
+    execute();
+    delay(50);
+  }
+  
+  //vidunithaedirisooriya 2025
