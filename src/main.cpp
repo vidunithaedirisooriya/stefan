@@ -115,6 +115,10 @@ class AllCallbacks: public BLECharacteristicCallbacks { //handle controlling thi
       uint8_t relayStateForBLE = relayState ? 1 : 0;
       relayStateCharacteristic.setValue(&relayStateForBLE,1);
       relayStateCharacteristic.notify();
+
+      uint8_t swingValueForBLE = swing&&relayState ? 1 : 0;  //since swing is dependent on relayState
+      swingCharacteristic.setValue(&swingValueForBLE, 1);
+      swingCharacteristic.notify();
     }
     else if (pCharacteristic->getUUID().equals(BLEUUID(timeSrc_UUID))) {
       timeSrc = numValue;
@@ -137,7 +141,7 @@ class AllCallbacks: public BLECharacteristicCallbacks { //handle controlling thi
     else if (pCharacteristic->getUUID().equals(BLEUUID(swing_UUID))) {
       // Handle N
       swing=!swing;
-      uint8_t swingValueForBLE = swing ? 1 : 0;
+      uint8_t swingValueForBLE = swing&&relayState ? 1 : 0;
       swingCharacteristic.setValue(&swingValueForBLE, 1);
       swingCharacteristic.notify();
     }
@@ -207,6 +211,10 @@ void changerelayState() {   //function to toggle power when called
     uint8_t relayStateForBLE = relayState ? 1 : 0;
     relayStateCharacteristic.setValue(&relayStateForBLE,1);
     relayStateCharacteristic.notify();
+
+    uint8_t swingValueForBLE = swing&&relayState ? 1 : 0;   //since swing is dependent on relayState
+    swingCharacteristic.setValue(&swingValueForBLE, 1);
+    swingCharacteristic.notify();
   }
 }
 
@@ -254,7 +262,7 @@ void toggleSwing() {        //same old
   if(currentMillis - prevToggleSwing >= 250){
     prevToggleSwing = currentMillis;
     swing = !swing;
-    uint8_t swingValueForBLE = swing ? 1 : 0;
+    uint8_t swingValueForBLE = swing&&relayState ? 1 : 0;
     swingCharacteristic.setValue(&swingValueForBLE, 1);
     swingCharacteristic.notify();
   }
@@ -323,7 +331,7 @@ void execute() {      //timer countdown, display and misc.
  digitalWrite(speeds[n-1], LOW);
 //  Serial.println(n-1);
  if(n!=3) digitalWrite(speeds[3], LOW);   //the relays turns on when 0 and off when 1 (this is because most relay modules I bought are this way.)
- digitalWrite(25, swing&&relayState);   //let the fan swing when it is spinning and commanded to swing  
+ digitalWrite(25, swing&&relayState);   //let the fan swing only when it is spinning and commanded to swing  
 
  if(timer == 1) {
       if(currentMillis - prevCountDownMillis >= 60000){
@@ -347,6 +355,10 @@ void execute() {      //timer countdown, display and misc.
       uint8_t timerValueForBLE = timer ? 1 : 0;
       timerCharacteristic.setValue(&timerValueForBLE, 1);
       timerCharacteristic.notify();
+
+      uint8_t swingValueForBLE = swing&&relayState ? 1 : 0;
+      swingCharacteristic.setValue(&swingValueForBLE, 1);
+      swingCharacteristic.notify();
     }
   }
 
