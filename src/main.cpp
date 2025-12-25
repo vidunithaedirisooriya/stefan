@@ -123,8 +123,9 @@ class AllCallbacks: public BLECharacteristicCallbacks { //handle controlling thi
       timeSrcCharacteristic.notify(); 
     }
     else if (pCharacteristic->getUUID().equals(BLEUUID(n_UUID))) {
-      n = numValue ;
-      nCharacteristic.setValue(n);
+      n = numValue -1 ;
+      int nForBLe = n+1;
+      nCharacteristic.setValue(nForBLe);
       nCharacteristic.notify(); 
     }
     else if (pCharacteristic->getUUID().equals(BLEUUID(timer_UUID))) {
@@ -222,7 +223,8 @@ void changeSpeed() {      //function to change speed when called
     prevSpeedMillis = currentMillis;
     n++;
     if(n > 3) n = 0;
-    nCharacteristic.setValue(n);
+    int nForBLe = n+1;
+    nCharacteristic.setValue(nForBLe);
     nCharacteristic.notify();
   }
 }
