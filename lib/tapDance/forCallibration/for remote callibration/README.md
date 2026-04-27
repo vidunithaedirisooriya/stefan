@@ -1,0 +1,1 @@
+In case your circuitry does not allow you to hook your board up to serial. Flash the board installed in the circuitry as the sender. Connect Serial to another board flashed with receiver.

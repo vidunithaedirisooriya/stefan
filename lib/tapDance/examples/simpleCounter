@@ -1,0 +1,29 @@
+//counts the number of times the touchPin has been tapped. NOTE: will not count if double tapped or held
+//remember to set the serial monitor to 115200 baud rate
+
+#include <Arduino.h>
+#include <tapDance.h>
+
+int counter;
+
+void onTap(){
+  Serial.println(counter++);
+}
+
+tapDance touchOn13(13, 30, 40, onTap, NULL, NULL);
+
+
+void setup() {
+  Serial.begin(115200);
+  delay(100);
+  Serial.println("Serial began");
+  touchOn13.init();
+  pinMode(LED_BUILTIN,OUTPUT);
+}
+
+void loop() {
+  delay(5000);
+  digitalWrite(LED_BUILTIN,HIGH);
+  delay(5000);
+  digitalWrite(LED_BUILTIN,LOW);
+}

@@ -9,6 +9,7 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 #include <Preferences.h>
+#include <tapDance.h>
 
 #ifdef U8X8_HAVE_HW_SPI
 #include <SPI.h>
@@ -51,12 +52,6 @@ Preferences prefs;
 bool deviceConnected = false;
 
 unsigned long currentMillis;              //variables to store the time for incoming timing functions
-unsigned long prevOnMillis;
-unsigned long prevSpeedMillis;
-unsigned long prevIncrementTimeSrc;
-unsigned long prevDecrementTimeSrc;
-unsigned long prevToggleTimer;
-unsigned long prevToggleSwing;
 unsigned long prevCountDownMillis;
 
 bool relayState;      //power: on/off var
@@ -89,6 +84,54 @@ const unsigned char nothing [] PROGMEM = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
+void changerelayState() {   //function to toggle power when called
+    relayState = !relayState;
+    uint8_t relayStateForBLE = relayState ? 1 : 0;
+    relayStateCharacteristic.setValue(&relayStateForBLE,1);
+    relayStateCharacteristic.notify();
+    
+    uint8_t swingValueForBLE = swing&&relayState ? 1 : 0;   //since swing is dependent on relayState
+    swingCharacteristic.setValue(&swingValueForBLE, 1);
+    swingCharacteristic.notify();
+}
+
+void changeSpeed() {      //function to change speed when called
+    n++;
+    if(n > 3) n = 0;
+    int nForBLe = n+1;
+    nCharacteristic.setValue(nForBLe);
+    nCharacteristic.notify();
+}
+
+void incrementTimeSrc() {   //function to increase timer amount when called by IR or touch
+  timeSrc++;
+  if(timeSrc > 99) timeSrc=99;
+  timeSrcCharacteristic.setValue(timeSrc);
+  timeSrcCharacteristic.notify();
+}
+
+void decrementTimeSrc() {   //function to decrease timer amount when called by IR or touch
+  timeSrc = timeSrc-1;
+  if(timeSrc < 0) timeSrc=0;
+  timeSrcCharacteristic.setValue(timeSrc);
+  timeSrcCharacteristic.notify();
+}
+
+void toggleTimer() {        //turn timer on/off
+  timer = !timer;
+  uint8_t timerValueForBLE = timer ? 1 : 0;
+  timerCharacteristic.setValue(&timerValueForBLE, 1);
+  timerCharacteristic.notify();
+}
+
+void toggleSwing() {        //same old
+  swing = !swing;
+  uint8_t swingValueForBLE = swing&&relayState ? 1 : 0;
+  swingCharacteristic.setValue(&swingValueForBLE, 1);
+  swingCharacteristic.notify();
+}
+
+
 // Setup callbacks onConnect and onDisconnect (BLE) 
 class MyServerCallbacks: public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
@@ -108,14 +151,7 @@ class AllCallbacks: public BLECharacteristicCallbacks { //handle controlling thi
     uint16_t numValue = *(uint16_t*)value.data();
 
     if (pCharacteristic->getUUID().equals(BLEUUID(relayState_UUID))) {
-      relayState=!relayState;
-      uint8_t relayStateForBLE = relayState ? 1 : 0;
-      relayStateCharacteristic.setValue(&relayStateForBLE,1);
-      relayStateCharacteristic.notify();
-
-      uint8_t swingValueForBLE = swing&&relayState ? 1 : 0;  //since swing is dependent on relayState
-      swingCharacteristic.setValue(&swingValueForBLE, 1);
-      swingCharacteristic.notify();
+      changerelayState();
     }
     else if (pCharacteristic->getUUID().equals(BLEUUID(timeSrc_UUID))) {
       timeSrc = numValue;
@@ -129,16 +165,10 @@ class AllCallbacks: public BLECharacteristicCallbacks { //handle controlling thi
       nCharacteristic.notify(); 
     }
     else if (pCharacteristic->getUUID().equals(BLEUUID(timer_UUID))) {
-      timer=!timer;
-      uint8_t timerValueForBLE = timer ? 1 : 0;
-      timerCharacteristic.setValue(&timerValueForBLE, 1);
-      timerCharacteristic.notify();
+      toggleTimer();
     }
     else if (pCharacteristic->getUUID().equals(BLEUUID(swing_UUID))) {
-      swing=!swing;
-      uint8_t swingValueForBLE = swing&&relayState ? 1 : 0;
-      swingCharacteristic.setValue(&swingValueForBLE, 1);
-      swingCharacteristic.notify();
+      toggleSwing();
     }
     else if (pCharacteristic->getUUID().equals(BLEUUID(name_UUID))) {
       String deviceName;
@@ -150,15 +180,72 @@ class AllCallbacks: public BLECharacteristicCallbacks { //handle controlling thi
   }
 };
 
+
+
+void remote(void *Parameters) {         //to receive, decode, understand and function according to IR remote
+  for(;;){
+  if (IrReceiver.decode()) {
+    
+    switch (IrReceiver.decodedIRData.command) {
+      case 0x85:
+        changerelayState();
+        break;
+        
+        case 0x87:
+        changeSpeed();
+        break;
+        
+        case 0x84:
+        incrementTimeSrc();
+        break;
+        
+        case 0x83:
+        decrementTimeSrc();
+        break;
+        
+        case 0x82:
+        toggleTimer();
+        break;
+        
+        case 0x86:
+        toggleSwing();
+        break;
+      }
+      vTaskDelay(500/portTICK_PERIOD_MS);
+      IrReceiver.resume();  // enable receiving of the next IR frame
+    }
+  vTaskDelay(50/portTICK_PERIOD_MS);
+}
+}
+
+
+
+tapDance touchOn13(13, 30, 40, changerelayState, NULL, NULL);
+tapDance touchOn12(12, 30, 45, changeSpeed, NULL, NULL);
+tapDance touchOn14(14, 30, 40, toggleSwing, NULL, NULL);
+tapDance touchOn27(27, 30, 40, incrementTimeSrc, NULL, NULL);
+tapDance touchOn33(33, 30, 40, decrementTimeSrc, NULL, NULL);
+tapDance touchOn32(32, 30, 45, toggleTimer, NULL, NULL);
+
+
 void setup() {
   Serial.begin(115200);
   IrReceiver.begin(IR_RECEIVE_PIN, ENABLE_LED_FEEDBACK);
-  pinMode(13, INPUT);
-  pinMode(12, INPUT);
-  pinMode(14, INPUT);
-  pinMode(27, INPUT);
-  pinMode(33, INPUT);
-  pinMode(32, INPUT);
+  xTaskCreate(
+    remote,
+    "handle inputs from ir receiver",
+    4096,
+    NULL,
+    1,
+    NULL
+  );
+
+  touchOn13.init();
+  touchOn12.init();
+  touchOn14.init();
+  touchOn27.init();
+  touchOn33.init();
+  touchOn32.init();
   pinMode(25,OUTPUT);
   for(int a; a<3 ; a++){
     pinMode(speeds[a], OUTPUT);
@@ -204,125 +291,6 @@ void setup() {
   delay(50);
 }
 
-void changerelayState() {   //function to toggle power when called
-  if (currentMillis - prevOnMillis >= 1250) {
-    prevOnMillis = currentMillis;
-    relayState = !relayState;
-    uint8_t relayStateForBLE = relayState ? 1 : 0;
-    relayStateCharacteristic.setValue(&relayStateForBLE,1);
-    relayStateCharacteristic.notify();
-    
-    uint8_t swingValueForBLE = swing&&relayState ? 1 : 0;   //since swing is dependent on relayState
-    swingCharacteristic.setValue(&swingValueForBLE, 1);
-    swingCharacteristic.notify();
-  }
-}
-
-void changeSpeed() {      //function to change speed when called
-  if (currentMillis-prevSpeedMillis >= 250) {
-    prevSpeedMillis = currentMillis;
-    n++;
-    if(n > 3) n = 0;
-    int nForBLe = n+1;
-    nCharacteristic.setValue(nForBLe);
-    nCharacteristic.notify();
-  }
-}
-
-void incrementTimeSrc() {   //function to increase timer amount when called by IR or touch
-  if(currentMillis - prevIncrementTimeSrc >= 50){
-    prevIncrementTimeSrc = currentMillis;
-    timeSrc++;
-  }
-  if(timeSrc > 99) timeSrc=99;
-  timeSrcCharacteristic.setValue(timeSrc);
-  timeSrcCharacteristic.notify();
-}
-
-void decrementTimeSrc() {   //function to decrease timer amount when called by IR or touch
-  if(currentMillis - prevDecrementTimeSrc >=50){
-    prevDecrementTimeSrc = currentMillis;
-    timeSrc = timeSrc-1;
-  }
-  if(timeSrc < 0) timeSrc=0;
-  timeSrcCharacteristic.setValue(timeSrc);
-  timeSrcCharacteristic.notify();
-}
-
-void toggleTimer() {        //turn timer on/off
-  if(currentMillis - prevToggleTimer >= 250){
-    prevToggleTimer = currentMillis;
-    timer = !timer;
-    uint8_t timerValueForBLE = timer ? 1 : 0;
-    timerCharacteristic.setValue(&timerValueForBLE, 1);
-    timerCharacteristic.notify();
-  }
-}
-
-void toggleSwing() {        //same old
-  if(currentMillis - prevToggleSwing >= 250){
-    prevToggleSwing = currentMillis;
-    swing = !swing;
-    uint8_t swingValueForBLE = swing&&relayState ? 1 : 0;
-    swingCharacteristic.setValue(&swingValueForBLE, 1);
-    swingCharacteristic.notify();
-  }
-}
-
-void remote() {         //to receive, decode, understand and function according to IR remote
-  if (IrReceiver.decode()) {
-    IrReceiver.resume();  // Early enable receiving of the next IR frame
-    
-    switch (IrReceiver.decodedIRData.command) {
-      case 0x85:
-       changerelayState();
-        break;
-      
-      case 0x87:
-       changeSpeed();
-       break;
-
-      case 0x84:
-       incrementTimeSrc();
-       break;
-      
-      case 0x83:
-       decrementTimeSrc();
-       break;
-
-      case 0x82:
-       toggleTimer();
-       break;
-
-       case 0x86:
-       toggleSwing();
-       break;
-    }
-  }
-}
-
-void ctrlPanel(){     //read what touchbuttons are contacted and function accordingly
-  if(touchRead(13)<20){
-    changerelayState();
-  }
-  if(touchRead(12)<20){
-    changeSpeed();
-  }
-  if(touchRead(14)<20){
-    toggleSwing();
-  }
-  if(touchRead(27)<20){
-    incrementTimeSrc();
-  }
-  if(touchRead(33)<20){
-    decrementTimeSrc();
-  }
-  if(touchRead(32)<20){
-    toggleTimer();
-  }
-}
-
-
 
 void execute() {      //timer countdown, display and misc.
   digitalWrite(speeds[n],relayState);
@@ -357,10 +325,10 @@ void execute() {      //timer countdown, display and misc.
         timerCharacteristic.setValue(&timerValueForBLE, 1);
         timerCharacteristic.notify();
 
-      uint8_t swingValueForBLE = swing&&relayState ? 1 : 0;
-      swingCharacteristic.setValue(&swingValueForBLE, 1);
-      swingCharacteristic.notify();
-    }
+        uint8_t swingValueForBLE = swing&&relayState ? 1 : 0;
+        swingCharacteristic.setValue(&swingValueForBLE, 1);
+        swingCharacteristic.notify();
+      }
   }
   
   u8g2.firstPage();
@@ -381,15 +349,13 @@ void execute() {      //timer countdown, display and misc.
       u8g2.drawXBM(96, 0, 32, 32, nothing);}
     } while ( u8g2.nextPage() );
     delay(100);
-  }
+}
   
   
   void loop() {     //just call the functions
     currentMillis = millis();
-    remote();
-    ctrlPanel();
     execute();
-    delay(50);
+    // delay(50);
   }
   
   //vidunithaedirisooriya 2025
