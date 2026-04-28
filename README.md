@@ -1,6 +1,6 @@
-RC_Fan_Upgrade_Mod
+Stefan
 
- RC Fan Upgrade project was born to upgrade an affordable pedestal fan to one with IR remote, BluetoothⓇ and touch controls by using an ESP32 centered control circuit, built with readily available components.
+ The stefan project was born to upgrade an affordable pedestal fan to one with IR remote, BluetoothⓇ and touch controls by using an ESP32 centered control circuit, built with readily available components.
 
     Features
 
@@ -19,3 +19,6 @@ RC_Fan_Upgrade_Mod
 
       Timer
          The controller circuit features a timer activatable and adjustable by any of the input methods. The timer range is 165% longer than that of a normal fan.(99min)
+
+    
+   
